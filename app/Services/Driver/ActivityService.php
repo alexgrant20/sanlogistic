@@ -26,9 +26,9 @@ class ActivityService implements CompanyInterface, ActivityStatusInterface, Resp
   private $needToCaclculateIncentive = false;
   private $activityHelper;
 
-  public function __construct(ActivityHelper $activityHelper)
+  public function __construct()
   {
-    $this->activityHelper = $activityHelper;
+    $this->activityHelper = new ActivityHelper();
   }
 
   private function setActivityConfigAndGetType($activity, $arrivalType, $departureType, &$totalCustTrip)

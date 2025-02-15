@@ -66,6 +66,7 @@ class ActivityController extends Controller implements ResponseCodeInterface
     $projectId = $user->person->project_id;
 
     $vehicles = Vehicle::where('address_id', $lastLocation->id)
+      ->where('project_id', $projectId)
       ->orderBy('license_plate')
       ->get();
 

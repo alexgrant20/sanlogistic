@@ -41,16 +41,29 @@ class ActivityHelper implements CompanyInterface, ActivityStatusInterface, Respo
     $halfTripCriteria = [0, $activities->count() - 1];
 
     $loop = 0;
+    $avoidType = ['maintenance', 'kir'];
 
-    $activities->each(function ($activity) use (&$totalDistance, &$loop, $halfTripCriteria) {
+    $internalActivity = $activities->where('id', $parentActivityId)->whereIn('type', $avoidType)->first();
+    $paidActivity = $activities->whereNotIn('type', [...$avoidType, 'return'])->get();
+
+    if ($internalActivity && $paidActivity->count() > 0) {
+      $isCompanyVehicle = in_array($internalActivity->vehicle->owner_id, [self::BESTINDO, self::SURYA_ANUGERAH]);
+
+      if(!$isCompanyVehicle) {
+        return 0;
+      }
+    }
+
+    $activities->each(function ($activity) use (&$totalDistance, &$loop, $halfTripCriteria, $avoidType) {
 
       if (($activity->do_number == "PT" && in_array($loop, $halfTripCriteria)) || $activity->type === "manuver") {
         $this->isHalfTrip = true;
       }
 
+      $isCompanyVehicle = in_array(@$activity->vehicle->owner_id, [self::BESTINDO, self::SURYA_ANUGERAH]);
+
       if (
-        !(in_array(@$activity->vehicle->owner_id, [self::BESTINDO, self::SURYA_ANUGERAH]) &&
-          $activity->type === "maintenance")
+        !(in_array($activity->type, $avoidType) || $isCompanyVehicle)
       ) {
         $totalDistance += $activity->arrival_odo - $activity->departure_odo;
       }

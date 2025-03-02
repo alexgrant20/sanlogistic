@@ -85,6 +85,9 @@ Route::prefix('/admin')->name('admin.')->middleware('auth', 'can:access-admin-pa
 
   Route::resource('/people', PersonController::class)->except('show');
 
+  Route::get('/people/finance', [PersonController::class, 'finance'])->name('people.finance');
+  Route::get('/people/finance/list', [PersonController::class, 'getFinanceList'])->name('people.finance.list');
+
   /**
    * VEHICLE
    */

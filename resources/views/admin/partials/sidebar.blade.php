@@ -108,6 +108,14 @@
               </a>
             </li>
           @endcan
+          @can('person-driver-finance')
+            <li>
+              <a class="sidebar-link {{ Route::is('admin.driver.finance') ? 'text-primary' : '' }}"
+                href="{{ route('admin.people.finance') }}">
+                Driver Finance
+              </a>
+            </li>
+          @endcan
         </ul>
       </li>
     @endcanany

@@ -106,12 +106,12 @@ class PersonController extends Controller
   {
     $personDocuments = PersonDocument::where('person_id', $person->id)->get();
 
-    $ktp = $personDocuments->filter(fn ($item) => $item->type === 'ktp')->first();
-    $sim = $personDocuments->filter(fn ($item) => $item->type === 'sim')->first();
-    $assurance = $personDocuments->filter(fn ($item) => $item->type === 'assurance')->first();
-    $bpjs_kesehatan = $personDocuments->filter(fn ($item) => $item->type === 'bpjs_kesehatan')->first();
-    $bpjs_ketenagakerjaan = $personDocuments->filter(fn ($item) => $item->type === 'bpjs_ketenagakerjaan')->first();
-    $npwp = $personDocuments->filter(fn ($item) => $item->type === 'npwp')->first();
+    $ktp = $personDocuments->filter(fn($item) => $item->type === 'ktp')->first();
+    $sim = $personDocuments->filter(fn($item) => $item->type === 'sim')->first();
+    $assurance = $personDocuments->filter(fn($item) => $item->type === 'assurance')->first();
+    $bpjs_kesehatan = $personDocuments->filter(fn($item) => $item->type === 'bpjs_kesehatan')->first();
+    $bpjs_ketenagakerjaan = $personDocuments->filter(fn($item) => $item->type === 'bpjs_ketenagakerjaan')->first();
+    $npwp = $personDocuments->filter(fn($item) => $item->type === 'npwp')->first();
 
     return view('admin.people.edit', [
       'person' => $person,
@@ -181,6 +181,47 @@ class PersonController extends Controller
     DB::commit();
 
     return to_route('admin.people.index')->with(genereateNotifaction(NotifactionTypeConstant::SUCCESS, 'person', 'updated'));
+  }
+
+  public function getFinanceList(Request $request)
+  {
+    $driverFinanceQuery = DB::table('activities')
+      ->join('users', 'activities.user_id', '=', 'users.id')
+      ->join('people', 'users.person_id', '=', 'people.id')
+      ->join('activity_statuses', 'activities.activity_status_id', '=', 'activity_statuses.id')
+      ->join('activity_payments', 'activity_statuses.id', '=', 'activity_payments.activity_status_id')
+      ->where('activity_statuses.status', 'pending')
+      ->groupBy('activities.user_id', 'people.name')
+      ->selectRaw("
+        people.name,
+        SUM(activity_payments.bbm_amount + activity_payments.toll_amount +
+            activity_payments.parking_amount + activity_payments.load_amount +
+            activity_payments.unload_amount + activity_payments.maintenance_amount +
+            activity_payments.courier_amount) AS total_payment
+        ");
+
+
+    $recordsTotal = $driverFinanceQuery->where('name', 'like', "%{$request->search['value']}%")->count();
+
+    $driverFinance = clone ($driverFinanceQuery)
+      ->where('name', 'like', "%{$request->search['value']}%")
+      ->take($request->length)
+      ->skip($request->start)
+      ->get();
+
+    return [
+      'draw' => (int) request()->draw,
+      'recordsTotal' =>  $recordsTotal,
+      'recordsFiltered' =>  $recordsTotal,
+      'data' => $driverFinance->toArray(),
+    ];
+  }
+
+  public function finance()
+  {
+    return view('admin.people.finance', [
+      'title' => 'Driver Finance',
+    ]);
   }
 
   public function importExcel(Request $request)

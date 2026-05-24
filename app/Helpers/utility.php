@@ -28,7 +28,7 @@ function uploadImages($images, $mainIdentifier, $timestamp)
 
   $arayOfPath = [];
   foreach ($images as $key => $image) {
-    $type =  Str::before($key, '_image');
+    $type = Str::before($key, '_image');
 
     [$filePath, $fullPath, $tempPath] = getAllPath($image, $mainIdentifier, $timestamp, $type);
 
@@ -49,7 +49,7 @@ function uploadImages($images, $mainIdentifier, $timestamp)
 
 function uploadImage($image, $type, $mainIdentifier, $timestamp)
 {
-  $type =  Str::before($type, '_image');
+  $type = Str::before($type, '_image');
 
   [$filePath, $fullPath, $tempPath] = getAllPath($image, $mainIdentifier, $timestamp, $type);
 
@@ -60,6 +60,15 @@ function uploadImage($image, $type, $mainIdentifier, $timestamp)
   if (!File::isDirectory("storage/{$type}-images")) {
     File::makeDirectory("storage/{$type}-images", 0777, true, true);
   }
+
+  $img->resize(
+    1280,
+    null,
+    function ($constraint) {
+      $constraint->aspectRatio();
+      $constraint->upsize();
+    }
+  );
 
   $img->save($fullPath, env('IMG_COMPRESS_PERCENTAGE'));
 
@@ -105,11 +114,12 @@ function get_location_ngt($plate_number)
 
   $token = login_ngt();
 
-  if (empty($token)) return [
-    "lat" => "No Data",
-    "lon" => "No Data",
-    "loc" => "No Data"
-  ];
+  if (empty($token))
+    return [
+      "lat" => "No Data",
+      "lon" => "No Data",
+      "loc" => "No Data"
+    ];
 
   $auth = "Authorization: Bearer {$token}";
 
@@ -189,7 +199,8 @@ function decideTextColorByDay($date, $rules, $fallbackColor, $defaultColor = 'te
   $diff = $date->timestamp - now()->timestamp;
 
   foreach ($rules as $key => $value) {
-    if ($diff <= days_to_seconds($key)) return $value;
+    if ($diff <= days_to_seconds($key))
+      return $value;
   }
 
   return $fallbackColor;
@@ -201,7 +212,8 @@ function decideTextColorByTwoNumber($int, $compareInt, $failColor, $fallbackColo
     return $defaultColor;
   }
 
-  if ((int) $compareInt <= (int) $int) return $failColor;
+  if ((int) $compareInt <= (int) $int)
+    return $failColor;
 
   return $fallbackColor;
 }

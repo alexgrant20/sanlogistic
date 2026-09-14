@@ -32,12 +32,20 @@ class VehicleController extends Controller
   {
     $this->middleware('can:vehicle-create', ['only' => ['create', 'store']]);
     $this->middleware('can:vehicle-edit', ['only' => ['edit', 'update']]);
-    $this->middleware('can:vehicle-view', ['only' => ['index']]);
+    $this->middleware('can:vehicle-view', ['only' => ['index', 'datatable']]);
   }
 
   public function index()
   {
-    $vehicles = DB::table('vehicles')
+    return view('admin.vehicles.index', [
+      'title' => 'Vehicles',
+      'importPath' => '/admin/vehicles/import/excel',
+    ]);
+  }
+
+  private function vehiclesBaseQuery()
+  {
+    return DB::table('vehicles')
       ->leftJoin('companies', 'vehicles.owner_id', '=', 'companies.id')
       ->leftJoin('projects', 'vehicles.project_id', '=', 'projects.id')
       ->leftJoin('areas', 'vehicles.area_id', '=', 'areas.id')
@@ -54,7 +62,55 @@ class VehicleController extends Controller
       ->leftJoin('vehicle_documents AS stnk', function ($join) {
         $join->on('stnk.vehicle_id', '=', 'vehicles.id');
         $join->where('stnk.type', '=', 'stnk');
-      })
+      });
+  }
+
+  public function datatable(Request $request)
+  {
+    $draw = (int) $request->input('draw', 1);
+    $start = max(0, (int) $request->input('start', 0));
+    $length = (int) $request->input('length', 10);
+    $length = $length > 0 ? min($length, 200) : 10;
+    $searchValue = trim((string) $request->input('search.value', ''));
+
+    $orderColumns = [
+      3 => 'vehicles.license_plate',
+      4 => 'companies.name',
+      5 => 'projects.name',
+      6 => 'vehicle_brands.name',
+      7 => 'vehicle_types.name',
+      8 => 'vehicles.odo',
+      9 => 'kir.expire',
+      10 => 'stnk.expire',
+    ];
+
+    $orderColumn = (int) $request->input('order.0.column', 0);
+    $orderDir = strtolower((string) $request->input('order.0.dir', 'asc')) === 'desc' ? 'desc' : 'asc';
+    $orderBy = $orderColumns[$orderColumn] ?? 'vehicles.id';
+
+    $baseQuery = $this->vehiclesBaseQuery();
+    $recordsTotal = (clone $baseQuery)->count('vehicles.id');
+
+    $query = clone $baseQuery;
+
+    if ($searchValue !== '') {
+      $query->where(function ($q) use ($searchValue) {
+        $q->where('vehicles.license_plate', 'like', "%{$searchValue}%")
+          ->orWhere('companies.name', 'like', "%{$searchValue}%")
+          ->orWhere('projects.name', 'like', "%{$searchValue}%")
+          ->orWhere('vehicle_brands.name', 'like', "%{$searchValue}%")
+          ->orWhere('vehicle_types.name', 'like', "%{$searchValue}%")
+          ->orWhere('vehicles.odo', 'like', "%{$searchValue}%");
+      });
+    }
+
+    $recordsFiltered = (clone $query)->count('vehicles.id');
+
+    $vehicles = $query
+      ->orderBy($orderBy, $orderDir)
+      ->orderBy('vehicles.id', $orderDir)
+      ->skip($start)
+      ->take($length)
       ->get([
         'vehicles.id',
         'license_plate',
@@ -70,11 +126,73 @@ class VehicleController extends Controller
         'vls.id AS vehicle_last_status_id',
       ]);
 
-    return view('admin.vehicles.index', [
-      'vehicles' => $vehicles,
-      'title' => 'Vehicles',
-      'importPath' => '/admin/vehicles/import/excel',
+    // Instead of a correlated subquery evaluated per row, fetch the latest
+    // checklist id for only the vehicles on this page in a single batched query.
+    $vehicleIds = $vehicles->pluck('id')->all();
+
+    $latestChecklistIds = DB::table('vehicle_checklists')
+      ->select('vehicle_id', DB::raw('MAX(id) AS latest_checklist_id'))
+      ->whereIn('vehicle_id', $vehicleIds)
+      ->groupBy('vehicle_id')
+      ->pluck('latest_checklist_id', 'vehicle_id');
+
+    $canEdit = auth()->user()->can('vehicle-edit');
+
+    $rows = $vehicles->map(function ($vehicle) use ($latestChecklistIds, $canEdit) {
+      $latestChecklistId = $latestChecklistIds->get($vehicle->id);
+
+      return $this->formatVehicleRow($vehicle, $latestChecklistId, $canEdit);
+    });
+
+    return response()->json([
+      'draw' => $draw,
+      'recordsTotal' => $recordsTotal,
+      'recordsFiltered' => $recordsFiltered,
+      'data' => $rows,
     ]);
+  }
+
+  private function formatVehicleRow($vehicle, $latestChecklistId, bool $canEdit): array
+  {
+    $actions = '';
+    if (!empty($latestChecklistId) || $canEdit) {
+      $actions = '<div class="dropdown"><button class="btn" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-three-dots"></i></button><ul class="dropdown-menu">';
+
+      if ($canEdit) {
+        $editUrl = route('admin.vehicles.edit', $vehicle->license_plate);
+        $actions .= '<li><a href="' . e($editUrl) . '" class="dropdown-item">Edit</a></li>';
+      }
+
+      if (!empty($latestChecklistId)) {
+        $showUrl = route('admin.vehicles-checklists.show', $latestChecklistId);
+        $actions .= '<li><a href="' . e($showUrl) . '" class="dropdown-item">Last Status</a></li>';
+      }
+
+      $actions .= '</ul></div>';
+    }
+
+    $licensePlateColor = intval($vehicle->vehicle_license_plate_color_id) === 2 ? 'bg-warning' : 'bg-white';
+    $licensePlate = '<span class="text-dark ' . $licensePlateColor . '">' . e($vehicle->license_plate) . '</span>';
+
+    $kirClass = decideTextColorByDay($vehicle->kir_expire, [0 => 'text-red-700', 15 => 'text-red-300', 30 => 'text-warning'], 'text-green-300');
+    $kirExpire = '<span class="' . $kirClass . '">' . e($vehicle->kir_expire ?? 'No Data') . '</span>';
+
+    $stnkClass = decideTextColorByDay($vehicle->stnk_expire, [0 => 'text-red-700', 15 => 'text-red-300', 30 => 'text-warning'], 'text-green-300');
+    $stnkExpire = '<span class="' . $stnkClass . '">' . e($vehicle->stnk_expire ?? 'No Data') . '</span>';
+
+    return [
+      $vehicle->id,
+      '',
+      $actions,
+      $licensePlate,
+      e($vehicle->company_name),
+      e($vehicle->project_name),
+      e($vehicle->vehicle_brand),
+      e($vehicle->vehicle_type),
+      $vehicle->odo,
+      $kirExpire,
+      $stnkExpire,
+    ];
   }
 
   public function create()

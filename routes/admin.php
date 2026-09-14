@@ -94,6 +94,7 @@ Route::prefix('/admin')->name('admin.')->middleware('auth', 'can:access-admin-pa
     Route::get('/migrate/image', 'migrateImage')->name('migrate.image');
     Route::get('/vehicle_type/{id}', 'vehicleType')->name('types');
     Route::get('/vehicle_variety/{id}', 'vehicleVariety')->name('varieties');
+    Route::get('/datatable', 'datatable')->name('datatable');
   });
 
   Route::resource('/vehicles', VehicleController::class)->except('show', 'destroy');
@@ -104,6 +105,8 @@ Route::prefix('/admin')->name('admin.')->middleware('auth', 'can:access-admin-pa
 
   Route::controller(VehicleChecklistController::class)->name('vehicles-checklists.')->group(function () {
     Route::get('/vehicle-checklist/{vehicleChecklist}', 'show')->name('show');
+    Route::get('/vehicle-checklist/{vehicleChecklist}/activities', 'activities')->name('activities');
+    Route::get('/vehicle-checklist/{vehicleChecklist}/download', 'downloadPdf')->name('download');
   });
 
   /**
@@ -111,7 +114,6 @@ Route::prefix('/admin')->name('admin.')->middleware('auth', 'can:access-admin-pa
    */
 
   Route::controller(VehicleLastStatusController::class)->name('vehicles-last-statuses.')->group(function () {
-    Route::get('/vehicle-last-status/{vehicle}', 'show')->name('show');
     Route::get('/vehicle-last-statuses', 'index')->name('index');
   });
 

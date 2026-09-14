@@ -27,6 +27,7 @@
               <th>Equipment</th>
               <th>Gear</th>
               <th>Other</th>
+              <th>Latest Condition</th>
             </tr>
           </thead>
           <tbody>
@@ -40,9 +41,9 @@
                       <i class="bi bi-three-dots"></i>
                     </button>
                     <ul class="dropdown-menu">
-                      @if (!empty($vehicleLS->vehicle_last_status_id))
+                      @if (!empty($vehicleLS->latest_checklist_id))
                         <li>
-                          <a href="{{ route('admin.vehicles-last-statuses.show', $vehicleLS->license_plate) }}"
+                          <a href="{{ route('admin.vehicles-checklists.show', $vehicleLS->latest_checklist_id) }}"
                             class="dropdown-item">
                             Last Status
                           </a>
@@ -87,6 +88,16 @@
                 </td>
                 <td @class([$errorClass => $vehicleLS->total_broken_other > 0])>
                   {{ $vehicleLS->total_broken_other }}
+                </td>
+                <td>
+                  @if (!is_null($vehicleLS->latest_condition_percentage))
+                    <span
+                      class="{{ $vehicleLS->latest_condition_percentage == 100 ? 'text-green-300' : 'text-red-700' }}">
+                      {{ $vehicleLS->latest_condition_percentage }}%
+                    </span>
+                  @else
+                    No Data
+                  @endif
                 </td>
               </tr>
             @endforeach

@@ -67,6 +67,11 @@ class Vehicle extends Model
     return $this->hasMany(VehicleChecklist::class);
   }
 
+  public function latestVehicleChecklist()
+  {
+    return $this->hasOne(VehicleChecklist::class)->latestOfMany();
+  }
+
   public function getRouteKeyName()
   {
     return 'license_plate';

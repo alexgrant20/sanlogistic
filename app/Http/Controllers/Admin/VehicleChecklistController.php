@@ -5,51 +5,56 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\VehicleChecklist;
 use App\Models\Vehicle;
+use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class VehicleChecklistController extends Controller
 {
-  public function show(VehicleChecklist $vehicleChecklist)
+  private function conditionLabelGroups(): array
   {
-    $lampLabel = ['lampu_besar', 'lampu_kota', 'lampu_rem', 'lampu_sein', 'lampu_mundur', 'lampu_kabin'];
-    $oilLabel = ['oli_mesin', 'minyak_rem', 'minyak_kopling', 'oli_hidraulic', 'exhaust_brake'];
-    $tireLabel = ['ban_depan', 'ban_belakang_dalam', 'ban_belakang_luar', 'ban_serep'];
-    $velgLabel = ['velg_ban_depan', 'velg_ban_belakang_dalam', 'velg_ban_belakang_luar', 'velg_ban_serep'];
-    $tirePreasureLabel = ['tekanan_angin_ban_depan', 'tekanan_angin_ban_belakang_dalam', 'tekanan_angin_ban_belakang_luar', 'tekanan_angin_ban_serep'];
-    $glassLabel = ['kaca_depan', 'kaca_belakang', 'kaca_samping'];
-    $otherOutsideLabel = ['accu', 'tutup_radiator', 'tangki_bahan_bakar', 'tutup_tangki_bahan_bakar'];
-    $otherInsideLabel = ['spion', 'wiper', 'klakson', 'panel_speedometer', 'panel_bahan_bakar', 'sunvisor', 'jok'];
+    return [
+      'lamp' => ['lampu_besar', 'lampu_kota', 'lampu_rem', 'lampu_sein', 'lampu_mundur', 'lampu_kabin'],
+      'oil' => ['oli_mesin', 'minyak_rem', 'minyak_kopling', 'oli_hidraulic', 'exhaust_brake'],
+      'tire' => ['ban_depan', 'ban_belakang_dalam', 'ban_belakang_luar', 'ban_serep'],
+      'velg' => ['velg_ban_depan', 'velg_ban_belakang_dalam', 'velg_ban_belakang_luar', 'velg_ban_serep'],
+      'tirePreasure' => ['tekanan_angin_ban_depan', 'tekanan_angin_ban_belakang_dalam', 'tekanan_angin_ban_belakang_luar', 'tekanan_angin_ban_serep'],
+      'glass' => ['kaca_depan', 'kaca_belakang', 'kaca_samping'],
+      'otherOutside' => ['accu', 'tutup_radiator', 'tangki_bahan_bakar', 'tutup_tangki_bahan_bakar'],
+      'otherInside' => ['spion', 'wiper', 'klakson', 'panel_speedometer', 'panel_bahan_bakar', 'sunvisor', 'jok'],
+    ];
+  }
 
+  private function conditionPercentage(VehicleChecklist $item, array $labels): int
+  {
+    $uniqueVal = collect($item)->only($labels)->countBy();
+    $ok = (int) $uniqueVal->get(0);
+    $broken = (int) $uniqueVal->get(1);
+
+    return $ok + $broken > 0 ? (int) round(($ok / ($ok + $broken)) * 100) : 0;
+  }
+
+  private function allConditionLabels(): array
+  {
+    return array_merge(...array_values($this->conditionLabelGroups()));
+  }
+
+  private function buildShowData(VehicleChecklist $vehicleChecklist)
+  {
+    $labelGroups = $this->conditionLabelGroups();
+    $lampLabel = $labelGroups['lamp'];
+    $oilLabel = $labelGroups['oil'];
+    $tireLabel = $labelGroups['tire'];
+    $velgLabel = $labelGroups['velg'];
+    $tirePreasureLabel = $labelGroups['tirePreasure'];
+    $glassLabel = $labelGroups['glass'];
+    $otherOutsideLabel = $labelGroups['otherOutside'];
+    $otherInsideLabel = $labelGroups['otherInside'];
+
+    $vehicleChecklist->load('user.person');
     $vehicleChecklist__ori = $vehicleChecklist;
-    $vehicle =  $vehicleChecklist->vehicle;
+    $vehicle = $vehicleChecklist->vehicle;
     $vehicleChecklist = collect($vehicleChecklist);
-    $vehicleChecklists = VehicleChecklist::where('vehicle_id', $vehicle->id)->latest()->with('address', 'user', 'user.person')->get();
-
-    $vehicleCheclistsModif = collect();
-
-    foreach ($vehicleChecklists as $item) {
-
-      $uniqueVal = collect($item)->only([
-        ...$lampLabel,
-        ...$oilLabel,
-        ...$tireLabel,
-        ...$velgLabel,
-        ...$tirePreasureLabel,
-        ...$glassLabel,
-        ...$otherOutsideLabel,
-        ...$otherInsideLabel
-      ])->countBy();
-
-      $vehicleCondition = round(((int)$uniqueVal->get(0) / ((int)$uniqueVal->get(0) + (int)$uniqueVal->get(1))) * 100);
-
-      $vehicleCheclistsModif->push(
-        collect([
-          ...$item->toArray(),
-          'vehicle_condition' => $vehicleCondition,
-          'created_at' => $item->created_at->format('Y-m-d')
-        ])
-      );
-    }
 
     $lamp = $vehicleChecklist->only($lampLabel);
     $oil = $vehicleChecklist->only($oilLabel);
@@ -82,7 +87,7 @@ class VehicleChecklistController extends Controller
 
     $totalOk = (int) $lastStatusSummary->get(0);
     $totalBroken = (int) $lastStatusSummary->get(1);
-    $totalItem =  $totalOk + $totalBroken;
+    $totalItem = $totalOk + $totalBroken;
 
     $okItemPercentage = round(($totalOk / $totalItem) * 100);
 
@@ -167,15 +172,120 @@ class VehicleChecklistController extends Controller
       ],
     ];
 
-    return view('admin.vehicle_checklists.show', [
+    return [
       'title' => $vehicle->license_plate . ' Last Status',
       'vehicle' => $vehicle,
       'okItemPercentage' => $okItemPercentage,
       'totalOk' => $totalOk,
       'totalBroken' => $totalBroken,
       'vehicleChecklist' => $vehicleChecklistData,
-      'vehicleChecklists' => $vehicleCheclistsModif,
       'vehicleChecklist__ori' => $vehicleChecklist__ori
-    ]);
+    ];
+  }
+
+  public function show(Request $request, VehicleChecklist $vehicleChecklist)
+  {
+    $isAjax = $request->ajax();
+    $data = $this->buildShowData($vehicleChecklist);
+
+    if ($isAjax) {
+      return response()->json([
+        'id' => $data['vehicleChecklist__ori']->id,
+        'header' => view('admin.vehicle_checklists._header', $data)->render(),
+        'info' => view('admin.vehicle_checklists._info', $data)->render(),
+        'categories' => view('admin.vehicle_checklists._categories', $data)->render(),
+      ]);
+    }
+
+    return view('admin.vehicle_checklists.show', $data);
+  }
+
+  public function activities(Request $request, VehicleChecklist $vehicleChecklist)
+  {
+    $labels = $this->allConditionLabels();
+
+    $draw = (int) $request->input('draw', 1);
+    $start = max(0, (int) $request->input('start', 0));
+    $length = (int) $request->input('length', 50);
+    $length = $length > 0 ? min($length, 200) : 50;
+    $searchValue = trim((string) $request->input('search.value', ''));
+    $orderColumn = (int) $request->input('order.0.column', 5);
+    $orderDir = strtolower((string) $request->input('order.0.dir', 'desc')) === 'asc' ? 'asc' : 'desc';
+
+    $baseQuery = VehicleChecklist::where('vehicle_id', $vehicleChecklist->vehicle_id);
+    $recordsTotal = (clone $baseQuery)->count();
+
+    $query = (clone $baseQuery)->with(['address', 'user.person']);
+
+    if ($searchValue !== '') {
+      $query->where(function ($q) use ($searchValue) {
+        $q->where('odo', 'like', "%{$searchValue}%")
+          ->orWhereHas('address', fn($a) => $a->where('name', 'like', "%{$searchValue}%"))
+          ->orWhereHas('user.person', fn($p) => $p->where('name', 'like', "%{$searchValue}%"));
+      });
+    }
+
+    $recordsFiltered = (clone $query)->count();
+
+    switch ($orderColumn) {
+      case 1: // ODO
+        $query->orderBy('odo', $orderDir);
+        break;
+      case 2: // Location
+        $query->join('addresses', 'addresses.id', '=', 'vehicle_checklists.address_id')
+          ->orderBy('addresses.name', $orderDir)
+          ->select('vehicle_checklists.*');
+        break;
+      case 4: // Created By
+        $query->join('users', 'users.id', '=', 'vehicle_checklists.user_id')
+          ->join('people', 'people.id', '=', 'users.person_id')
+          ->orderBy('people.name', $orderDir)
+          ->select('vehicle_checklists.*');
+        break;
+      default: // Created At
+        $query->orderBy('created_at', $orderDir)->orderBy('id', $orderDir);
+        break;
+    }
+
+    $items = $query->skip($start)->take($length)->get();
+
+    $rows = $items->map(function (VehicleChecklist $item) use ($labels) {
+      $link = route('admin.vehicles-checklists.show', $item->id);
+
+      return [
+        '<a href="' . e($link) . '" class="btn btn-primary checklist-link"><i class="fa-solid fa-eye"></i></a>',
+        $item->odo,
+        e($item->address->name ?? ''),
+        $this->conditionPercentage($item, $labels) . '%',
+        e($item->user->person->name ?? ''),
+        $item->created_at->format('Y-m-d'),
+        $item->id,
+      ];
+    });
+
+    $response = [
+      'draw' => $draw,
+      'recordsTotal' => $recordsTotal,
+      'recordsFiltered' => $recordsFiltered,
+      'data' => $rows,
+    ];
+
+    $findId = $request->input('find_id');
+    if ($findId) {
+      $response['rank'] = (clone $baseQuery)
+        ->where('created_at', '>=', VehicleChecklist::find($findId)?->created_at ?? now())
+        ->count() - 1;
+    }
+
+    return response()->json($response);
+  }
+
+  public function downloadPdf(VehicleChecklist $vehicleChecklist)
+  {
+    $data = $this->buildShowData($vehicleChecklist);
+
+    $pdf = Pdf::loadView('pdf.vehicle_checklist', $data);
+
+    return $pdf->download('Vehicle-Checklist-' . $data['vehicle']->license_plate . '-' . $vehicleChecklist->id . '.pdf');
   }
 }

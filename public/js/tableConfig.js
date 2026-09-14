@@ -1,8 +1,10 @@
 "use strict";
 
 document.addEventListener("DOMContentLoaded", function () {
-  const table = $('table[data-display="datatables"]').DataTable({
-    order: [],
+  const $tableEl = $('table[data-display="datatables"]');
+  const ajaxUrl = $tableEl.data("ajax");
+
+  const options = {
     responsive: true,
     columnDefs: [
       {
@@ -16,7 +18,18 @@ document.addEventListener("DOMContentLoaded", function () {
         hidden: true,
       },
     ],
-  });
+  };
+
+  if (ajaxUrl) {
+    options.serverSide = true;
+    options.processing = true;
+    options.order = [[0, "desc"]];
+    options.ajax = { url: ajaxUrl, type: "GET" };
+  } else {
+    options.order = [];
+  }
+
+  const table = $tableEl.DataTable(options);
 
   if(table.context.length == 0) return;
 

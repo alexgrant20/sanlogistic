@@ -52,7 +52,7 @@ class ErrorLog extends Model
             'file_line' => $e->getLine(),
             'stack_trace' => implode("\n", $trimmedStackTraces),
             'created_at' => Carbon::now(),
-            'created_by' => Auth::id() ?? 'system',
+            'created_by' => Auth::id(),
             'created_ip' => request()->ip() ?? 'local',
         ]);
 

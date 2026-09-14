@@ -26,7 +26,7 @@ class ActivityController extends Controller implements ResponseCodeInterface
 
   public function __construct()
   {
-    $this->activityService = new ActivityService();
+    $this->activityService = app(ActivityService::class);
     $this->middleware('can:activity-create');
     $this->driverUtility = new DriverUtility();
   }

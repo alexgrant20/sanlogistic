@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Vehicle;
-use App\Models\VehicleChecklist;
 use Illuminate\Support\Facades\DB;
 
 class VehicleLastStatusController extends Controller
@@ -24,9 +23,9 @@ class VehicleLastStatusController extends Controller
     ];
   }
 
-  private function conditionPercentage(VehicleChecklist $checklist): ?int
+  private function conditionPercentage(object $vehicleLastStatus): ?int
   {
-    $counts = collect($checklist)->only($this->conditionLabels())->countBy();
+    $counts = collect($vehicleLastStatus)->only($this->conditionLabels())->countBy();
     $ok = (int) $counts->get(0);
     $broken = (int) $counts->get(1);
     $total = $ok + $broken;
@@ -47,7 +46,7 @@ class VehicleLastStatusController extends Controller
         $join->on('stnk.vehicle_id', '=', 'vehicles.id');
         $join->where('stnk.type', '=', 'stnk');
       })
-      ->get([
+      ->get(array_merge([
         'vehicles.id',
         'license_plate',
         'vehicle_license_plate_color_id',
@@ -55,6 +54,7 @@ class VehicleLastStatusController extends Controller
         'vehicle_last_statuses.id AS vehicle_last_status_id',
         'maintenance_odo',
         'maintenance_date',
+      ], $this->conditionLabels(), [
         DB::raw("IFNULL(lampu_besar + lampu_kota + lampu_rem + lampu_sein + lampu_mundur + lampu_kabin + lampu_senter, 0) AS total_broken_lamp"),
         DB::raw("IFNULL(kaca_depan + kaca_samping + kaca_belakang, 0) AS total_broken_glass"),
         DB::raw(
@@ -77,7 +77,7 @@ class VehicleLastStatusController extends Controller
         klakson + panel_speedometer + panel_bahan_bakar + sunvisor + jok
         + air_conditioner, 0) AS total_broken_other"
         ),
-      ]);
+      ]));
 
     $latestChecklists = Vehicle::with('latestVehicleChecklist')
       ->whereIn('id', $vehicleLastStatuses->pluck('id'))
@@ -85,10 +85,8 @@ class VehicleLastStatusController extends Controller
       ->keyBy('id');
 
     $vehicleLastStatuses = $vehicleLastStatuses->map(function ($vehicleLS) use ($latestChecklists) {
-      $latestChecklist = $latestChecklists->get($vehicleLS->id)?->latestVehicleChecklist;
-
-      $vehicleLS->latest_checklist_id = $latestChecklist?->id;
-      $vehicleLS->latest_condition_percentage = $latestChecklist ? $this->conditionPercentage($latestChecklist) : null;
+      $vehicleLS->latest_checklist_id = $latestChecklists->get($vehicleLS->id)?->latestVehicleChecklist?->id;
+      $vehicleLS->latest_condition_percentage = $this->conditionPercentage($vehicleLS);
 
       return $vehicleLS;
     });

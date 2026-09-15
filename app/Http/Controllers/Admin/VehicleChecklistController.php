@@ -283,9 +283,80 @@ class VehicleChecklistController extends Controller
   public function downloadPdf(VehicleChecklist $vehicleChecklist)
   {
     $data = $this->buildShowData($vehicleChecklist);
+    $data['vehicleChecklist'] = $this->mergeTireSectionsForPdf($data['vehicleChecklist']);
 
     $pdf = Pdf::loadView('pdf.vehicle_checklist', $data);
 
     return $pdf->download('Vehicle-Checklist-' . $data['vehicle']->license_plate . '-' . $vehicleChecklist->id . '.pdf');
+  }
+
+  /**
+   * Merge the "Ban Luar", "Velg", and "Tekanan Ban" sections into a single
+   * section for the PDF report only, since they all describe the tires.
+   */
+  private function mergeTireSectionsForPdf(array $vehicleChecklistData): array
+  {
+    $mergeKeys = ['Ban Luar', 'Velg', 'Tekanan Ban'];
+
+    if (count(array_intersect($mergeKeys, array_keys($vehicleChecklistData))) < count($mergeKeys)) {
+      return $vehicleChecklistData;
+    }
+
+    $mergedItems = collect();
+    $ok = 0;
+    $broken = 0;
+    $total = 0;
+    $notes = [];
+
+    foreach ($mergeKeys as $mergeKey) {
+      $section = $vehicleChecklistData[$mergeKey];
+
+      foreach ($section['items'] as $itemKey => $itemValue) {
+        $label = ucwords(str_replace(
+          ['velg_ban_', 'tekanan_angin_ban_', 'ban_', '_'],
+          ['Velg ', 'Tekanan ', 'Ban ', ' '],
+          $itemKey
+        ));
+        $mergedItems->put($label, $itemValue);
+      }
+
+      $ok += (int) ($section['summary']['ok'] ?? 0);
+      $broken += (int) ($section['summary']['broken'] ?? 0);
+      $total += (int) ($section['summary']['total'] ?? 0);
+
+      if (!empty($section['notes'])) {
+        $notes[] = $section['notes'];
+      }
+    }
+
+    $merged = [
+      'Ban, Velg & Tekanan Ban' => [
+        'config' => ['icon' => 'fa-solid fa-circle-dot'],
+        'items' => $mergedItems,
+        'notes' => implode(' | ', $notes),
+        'summary' => [
+          'ok' => $ok,
+          'broken' => $broken,
+          'total' => $total,
+        ],
+      ],
+    ];
+
+    $result = [];
+    $inserted = false;
+
+    foreach ($vehicleChecklistData as $key => $value) {
+      if (in_array($key, $mergeKeys, true)) {
+        if (!$inserted) {
+          $result += $merged;
+          $inserted = true;
+        }
+        continue;
+      }
+
+      $result[$key] = $value;
+    }
+
+    return $result;
   }
 }
